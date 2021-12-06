@@ -607,7 +607,7 @@ SpiDev_xfer(SpiDevObject *self, PyObject *args)
 	// reading 0 bytes doesnt matter but brings cs down
 	// tomdean:
 	// Stop generating an extra CS except in mode CS_HOGH
-	if (self->mode & SPI_CS_HIGH) status = read(self->fd, &rxbuf[0], 0);
+	// if (self->mode & SPI_CS_HIGH) status = read(self->fd, &rxbuf[0], 0);
 
 	free(txbuf);
 	free(rxbuf);
@@ -726,7 +726,7 @@ SpiDev_xfer2(SpiDevObject *self, PyObject *args)
 	// reading 0 bytes doesn't really matter but brings CS down
 	// tomdean:
 	// Stop generating an extra CS except in mode CS_HOGH
-	if (self->mode & SPI_CS_HIGH) status = read(self->fd, &rxbuf[0], 0);
+	// if (self->mode & SPI_CS_HIGH) status = read(self->fd, &rxbuf[0], 0);
 
 	Py_BEGIN_ALLOW_THREADS
 	free(txbuf);
@@ -879,7 +879,7 @@ SpiDev_xfer3(SpiDevObject *self, PyObject *args)
 	// reading 0 bytes doesn't really matter but brings CS down
 	// tomdean:
 	// Stop generating an extra CS except in mode CS_HIGH
-	if (self->mode & SPI_CS_HIGH) status = read(self->fd, &rxbuf[0], 0);
+	// if (self->mode & SPI_CS_HIGH) status = read(self->fd, &rxbuf[0], 0);
 
 	Py_BEGIN_ALLOW_THREADS
 	free(txbuf);
