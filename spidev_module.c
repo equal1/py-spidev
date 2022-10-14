@@ -35,7 +35,7 @@
 #include <sys/ioctl.h>
 #include <linux/ioctl.h>
 
-#define _VERSION_ "3.5"
+#define _VERSION_ "3.5+equal1"
 #define SPIDEV_MAXPATH 4096
 
 #define BLOCK_SIZE_CONTROL_FILE "/sys/module/spidev/parameters/bufsiz"
@@ -111,6 +111,7 @@ typedef struct {
 	uint8_t mode;	/* current SPI mode */
 	uint8_t bits_per_word;	/* current SPI bits per word setting */
 	uint32_t max_speed_hz;	/* current SPI max speed setting in Hz */
+	int wa_pull_cs_low_after_transfer; // pull cs low after transfer by doing a 0-length read
 } SpiDevObject;
 
 static PyObject *
@@ -124,6 +125,8 @@ SpiDev_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 	self->mode = 0;
 	self->bits_per_word = 0;
 	self->max_speed_hz = 0;
+
+	self->wa_pull_cs_low_after_transfer = 1;
 
 	Py_INCREF(self);
 	return (PyObject *)self;
@@ -602,12 +605,15 @@ SpiDev_xfer(SpiDevObject *self, PyObject *args)
 		Py_DECREF(val); // PySequence_SetItem does not steal reference, must Py_DECREF(val)
 	}
 
-	// WA:
-	// in CS_HIGH mode CS isn't pulled to low after transfer, but after read
-	// reading 0 bytes doesnt matter but brings cs down
-	// tomdean:
-	// Stop generating an extra CS except in mode CS_HOGH
-	// if (self->mode & SPI_CS_HIGH) status = read(self->fd, &rxbuf[0], 0);
+	if (self->wa_pull_cs_low_after_transfer) {
+		// WA:
+		// in CS_HIGH mode CS isn't pulled to low after transfer, but after read
+		// reading 0 bytes doesnt matter but brings cs down
+		// tomdean:
+		// Stop generating an extra CS except in mode CS_HIGH
+		if (self->mode & SPI_CS_HIGH) 
+			status = read(self->fd, &rxbuf[0], 0);
+	}
 
 	free(txbuf);
 	free(rxbuf);
@@ -721,12 +727,16 @@ SpiDev_xfer2(SpiDevObject *self, PyObject *args)
 		PySequence_SetItem(seq, ii, val);
 		Py_DECREF(val); // PySequence_SetItem does not steal reference, must Py_DECREF(val)
 	}
-	// WA:
-	// in CS_HIGH mode CS isnt pulled to low after transfer
-	// reading 0 bytes doesn't really matter but brings CS down
-	// tomdean:
-	// Stop generating an extra CS except in mode CS_HOGH
-	// if (self->mode & SPI_CS_HIGH) status = read(self->fd, &rxbuf[0], 0);
+
+	if (self->wa_pull_cs_low_after_transfer) {
+		// WA:
+		// in CS_HIGH mode CS isnt pulled to low after transfer
+		// reading 0 bytes doesn't really matter but brings CS down
+		// tomdean:
+		// Stop generating an extra CS except in mode CS_HIGH
+		if (self->mode & SPI_CS_HIGH) 
+			status = read(self->fd, &rxbuf[0], 0);
+	}
 
 	Py_BEGIN_ALLOW_THREADS
 	free(txbuf);
@@ -873,13 +883,15 @@ SpiDev_xfer3(SpiDevObject *self, PyObject *args)
 		block_start += block_size;
 	}
 
-
-	// WA:
-	// in CS_HIGH mode CS isnt pulled to low after transfer
-	// reading 0 bytes doesn't really matter but brings CS down
-	// tomdean:
-	// Stop generating an extra CS except in mode CS_HIGH
-	// if (self->mode & SPI_CS_HIGH) status = read(self->fd, &rxbuf[0], 0);
+	if (self->wa_pull_cs_low_after_transfer) {
+		// WA:
+		// in CS_HIGH mode CS isnt pulled to low after transfer
+		// reading 0 bytes doesn't really matter but brings CS down
+		// tomdean:
+		// Stop generating an extra CS except in mode CS_HIGH
+		if (self->mode & SPI_CS_HIGH) 
+			status = read(self->fd, &rxbuf[0], 0);
+	}
 
 	Py_BEGIN_ALLOW_THREADS
 	free(txbuf);
@@ -1158,6 +1170,39 @@ SpiDev_set_no_cs(SpiDevObject *self, PyObject *val, void *closure)
         return ret;
 }
 
+static int
+SpiDev_set_wa_pull_cs_low_after_transfer(SpiDevObject *self, PyObject *val, void *closure)
+{
+	uint8_t tmp;
+	int ret;
+
+	if (val == NULL) {
+		PyErr_SetString(PyExc_TypeError, "Cannot delete attribute");
+		return -1;
+	}
+	else if (!PyBool_Check(val)) {
+		PyErr_SetString(PyExc_TypeError, "The wa_pull_cs_low_after_transfer attribute must be boolean");
+		return -1;
+	}
+
+	self->wa_pull_cs_low_after_transfer = PyObject_IsTrue(val);
+	return 0;
+}
+
+static PyObject *
+SpiDev_get_wa_pull_cs_low_after_transfer(SpiDevObject *self, void *closure)
+{
+	PyObject *result;
+
+	if (self->wa_pull_cs_low_after_transfer)
+		result = Py_True;
+	else
+		result = Py_False;
+
+	Py_INCREF(result);
+	return result;
+}
+
 
 static int
 SpiDev_set_loop(SpiDevObject *self, PyObject *val, void *closure)
@@ -1299,6 +1344,9 @@ static PyGetSetDef SpiDev_getset[] = {
 			"bits per word\n"},
 	{"max_speed_hz", (getter)SpiDev_get_max_speed_hz, (setter)SpiDev_set_max_speed_hz,
 			"maximum speed in Hz\n"},
+	{"wa_pull_cs_low_after_transfer", (getter)SpiDev_get_wa_pull_cs_low_after_transfer,
+			(setter)SpiDev_set_wa_pull_cs_low_after_transfer,
+			"WA: if CS active high, pull CS low after transfer by doing a 0-length read\n"},
 	{NULL},
 };
 
